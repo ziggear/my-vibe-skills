@@ -52,6 +52,20 @@ When using OpenRouter for speech-to-text or "transcribe + process by instruction
 - **max_tokens**: Set an upper bound as needed; see OpenRouter and per-model docs for limits.
 - **model**: Must use a model ID listed in OpenRouter docs; cost and capability vary by model.
 
+## 5.1 Structured JSON and long analysis-style outputs
+
+When the task is to return a **single large JSON** (e.g. segment list with long transcript text per segment), the **entire** response counts toward `max_tokens`. If the expected output is large (e.g. many segments × long text per segment), set `max_tokens` high enough (e.g. 32768 or 65536) or the model may truncate mid-JSON, producing invalid JSON or missing/last fields.
+
+- **Explicit prompt for full content**: For fields that must contain full verbatim content (e.g. per-segment transcript), add instructions like “verbatim extraction, do not summarize or abbreviate” so the model does not shorten with "..." or summaries to save tokens.
+- **Pitfall**: Stored input (e.g. full transcript) can be correct while the **returned** segment fields are short; if the UI shows segment content from the model’s JSON, truncation or summarization in that JSON is the usual cause.
+
+## 5.2 Text generation: avoid example leakage
+
+When the task is to **generate one line or short text** from user-provided content (e.g. infer a title, summary, or label from a transcript or document), the model can **echo concrete examples** from the prompt instead of inferring from the user's input.
+
+- **Pitfall**: Putting a specific example first (e.g. "例如：Spark Mobile技术面试") often leads the model to return that same string for every request.
+- **Fix**: (1) In the prompt and system message, state explicitly that the output **must be inferred only from the user-provided content** and must not use example names or placeholders from the instructions. (2) Move examples to the **end** of the prompt or phrase them generically (e.g. "某公司 技术面试", "日期 + 类型"). (3) Optionally add a system line like "Do not use example or placeholder text from the instructions; infer from the user's content only."
+
 ## 6 Errors and Response Handling
 
 - **Non-2xx HTTP**: Do not return OpenRouter's raw response body or stack to the client; parse and map to unified error codes/messages; log on the server when needed.
