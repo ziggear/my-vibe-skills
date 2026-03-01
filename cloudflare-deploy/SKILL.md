@@ -95,6 +95,15 @@ This rule defines standards and caveats for deploying frontends (Pages), Worker 
 
 ## 5 Workers Deployment
 
+### 5.0 Authentication (why deploy may work without an API token)
+
+- **Interactive use (e.g. Cursor terminal, local shell)**: If you have run `npx wrangler login` once on that machine, Wrangler stores OAuth credentials locally (e.g. under `~/.wrangler`). Later, `npm run deploy` (or `npx wrangler deploy`) reuses that identity and does **not** require an API token each time. That is why deploy can succeed without setting any token.
+- **Headless / CI**: In environments with no browser, use an API token. Create a token in Cloudflare Dashboard (My Profile → API Tokens) with permissions for Workers and D1, then set:
+  - `CF_API_TOKEN`: the token value
+  - `CF_ACCOUNT_ID`: your account ID (from the dashboard or `npx wrangler whoami`)
+  Wrangler prefers these env vars when set and skips interactive login.
+- **Check current identity**: `npx wrangler whoami`.
+
 ### 5.1 Dependencies and Build
 
 - Run `npm install` in the project directory before deploying, or the build may fail to resolve dependencies.
@@ -125,6 +134,22 @@ This rule defines standards and caveats for deploying frontends (Pages), Worker 
 - Static site: Set the build output directory as the Pages root (e.g. `dist`, `build`).
 - If frontend and Worker share a repo: keep them in different directories and use separate `wrangler.toml` or Pages project config.
 - Frontend should call the **Worker's full URL** (from deployment); configure CORS in the Worker. Inject different API base URLs per environment via build-time env or config, not hardcoded in code.
+
+### 7.1 Worker + Pages full stack (deploy both for UI to update)
+
+When the app is **Worker (API) + Pages (frontend)**:
+
+- **Two separate deploys**: Deploying only the Worker (`npm run deploy` in the Worker directory) does **not** update the frontend. The UI is served from Pages; to ship new frontend code you must build and deploy the frontend as well.
+- **Full production deploy**:
+  1. **Worker**: In the Worker project directory: `npm run db:migrate:remote` (if schema changed), then `npm run deploy`.
+  2. **Frontend**: In the frontend project directory, build with the **production API base URL** (e.g. `VITE_API_BASE_URL=https://your-worker.workers.dev`), then upload the build output to Pages:
+     ```bash
+     VITE_API_BASE_URL=https://your-worker.workers.dev npm run build
+     npx wrangler pages deploy dist --project-name=<your-pages-project-name>
+     ```
+     Use the same Worker URL the frontend will call in production; otherwise the deployed site will hit the wrong API or localhost.
+- **Pitfall**: Saying "deploy to production" and only running Worker deploy leaves the live site showing the old UI until the frontend is built and deployed to Pages. If the user reports "production still shows old UI", check that **Pages** was redeployed with the new build, not only the Worker.
+- **Pages production vs preview**: `wrangler pages deploy` may create a preview deployment by default. To have the main project domain (e.g. `your-project.pages.dev`) show the new build, use `--branch=main` (or the branch configured as production in the Pages project), or in the Cloudflare Dashboard set the latest deployment as the production deployment.
 
 ## 8 Free Tier Limits and Caveats (Must Read)
 
