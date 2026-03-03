@@ -9,7 +9,7 @@ Run this workflow when **closing a session** or when the user asks to recap the 
 
 **Skills directory**: Save skills in the **current Agent's skills directory** (the path depends on the host). Examples: Cursor uses `~/.cursor/skills/`, Claude uses `~/.claude/skills/`. Use the appropriate path for the environment you are running in.
 
-**Confirmation**: Do not create or edit any skill or rule files until the user has seen the proposed list (recap table + planned new/improved skills and/or AGENTS.md or rule updates) and explicitly approved. Support "execute all", "only these items", or "do not write". **Even when the user points out that a specific recap item or a conversation point is suitable for a new skill or for improving an existing skill, do not make the change immediately**—update the action checklist with that item and wait for the user's final confirmation before executing Step 3.
+**Confirmation**: Do not create or edit any skill or rule files until the user has seen the proposed list (recap table + planned new/improved skills and/or AGENTS.md or rule updates) and explicitly approved. Support "execute all", "only these items", or "do not write". **Even when the user points out that a specific recap item or a conversation point is suitable for a new skill or for improving an existing skill, do not make the change immediately**—work out the content in your reasoning/thinking, update the action checklist with that item, and wait for the user's final confirmation before executing Step 3 (writing to SKILL.md or rule files).
 
 **Session language**: When outputting to the user (recap, skill checklist, confirmation prompts, summaries), use the **same language as the current conversation**. If the user has been writing in Chinese, output in Chinese; if in English, output in English. Infer from the user's messages; do not ask.
 
@@ -25,14 +25,13 @@ Run this workflow when **closing a session** or when the user asks to recap the 
 
 ## Discussion mode: user points out a specific item
 
-When the user **discusses** a particular recap row or a point in the conversation and says (or implies) that it is suitable for a **new skill** or for **improving an existing skill** (or adding to AGENTS.md/rule):
+When the user **discusses** a particular recap row or a point in the conversation and says (or implies) that it is suitable for a **new skill** or for **improving an existing skill** (or adding to AGENTS.md/rule)—and especially when a **checklist has already been shown**—follow this sequence strictly:
 
-1. **Think it through**: Decide whether it should go under "To create", "To improve", or "To add to AGENTS.md or rule"; choose path and scope (e.g. which existing skill to improve, what to add).
-2. **Do not execute**: Do **not** create or edit any SKILL.md, AGENTS.md, or rule file at this step.
-3. **Update the checklist**: Add or update the corresponding entry in the action checklist (To create / To improve / To add to AGENTS.md or rule). If a full recap table does not exist yet, you may output a minimal recap row for this item plus the updated checklist.
-4. **Show and wait**: Output the updated checklist and ask the user to confirm when ready (e.g. "Execute all", "Do only item X", or "Skip"). Only after the user gives **final confirmation** proceed to Step 3 for the approved items.
+1. **Work out the content in thinking first**: In your reasoning/thinking (internal step, not the final user-facing reply), decide scope, path, and key points: "To create" vs "To improve" vs "To add to AGENTS.md/rule"; target path; 1–2 sentence purpose or what to add. Do **not** write any SKILL.md, AGENTS.md, or rule file at this step.
+2. **Update the checklist**: Add or update the corresponding entry in the action checklist (To create / To improve / To add to AGENTS.md or rule). If a full recap table does not exist yet, you may output a minimal recap row for this item plus the updated checklist.
+3. **Show and wait**: Output **only** the updated checklist and a clear confirmation prompt (e.g. "Confirm to create/improve: reply 'Execute' / 'Only this item' / 'Skip'"). Do **not** create or edit any files. Only after the user gives **final confirmation** (e.g. "execute", "create it", "yes") proceed to Step 3 for the approved items and write to SKILL.md or rule files.
 
-This keeps all proposed changes in one place (the checklist) and avoids applying changes before the user has seen the full picture and agreed.
+This keeps all proposed changes in the checklist and avoids writing files before the user has agreed. If you have already shown a checklist and the user suggests a new or changed skill, always go through "thinking → update checklist → show checklist + ask for confirmation → on confirmation only, write files".
 
 ## Workflow
 
@@ -103,6 +102,8 @@ Check existing skills in the Agent's skills directory (e.g. assemblyai-transcrip
 3. **Confirm with the user**: Ask the user to approve the list. For each item ask Yes/No, or ask once: "N items above; reply Yes/No per item, or say execute all / skip all / only items X, Y."
 4. **Only after** the user has confirmed (per-item Yes/No, or "execute all", etc.) proceed to Step 3 only for the approved items. If the user says skip or only recap, do not create or edit any files.
 
+**If the user later suggests a new or changed skill (after the checklist was already shown)**: Do not write SKILL.md or rule files in that same reply. First update the checklist with the new/changed item, output the updated checklist and ask for confirmation; only in a follow-up turn, after the user confirms, run Step 3 and write files. See **Discussion mode** above.
+
 ### Step 3: Create or Improve Skills / Add to AGENTS.md or Rule (only after user confirmation)
 
 Execute this step only when the user has approved the list from Step 2.5 (e.g. "execute all" or specified which items to do).
@@ -158,7 +159,7 @@ Session only fixed a typo in one file. No reusable domain or capability.
 
 - [ ] Recap is a **table** (Type | Details | Conclusion) with real detours, pitfalls, decisions, or external capabilities from this session—not generic advice.
 - [ ] Each row's **Conclusion** is one of Skip / SKILL / Rule/AGENTS, using the judgment criteria.
-- [ ] **Discussion mode**: If the user pointed out that a specific item is suitable for a new skill or improving an existing skill, the checklist was updated and **no** skill/rule file was created or edited until the user gave final confirmation.
+- [ ] **Discussion mode**: If the user pointed out that a specific item is suitable for a new skill or improving an existing skill, (1) the proposed content was worked out in thinking first, (2) the checklist was updated with that item, (3) only the updated checklist and confirmation prompt were output, and (4) **no** skill/rule file was created or edited until the user gave final confirmation ("execute", "create it", etc.).
 - [ ] **Session language**: Recap table, checklist, and confirmations were output in the same language as the conversation.
 - [ ] **Skill file language**: All SKILL.md content was written in English (unless the user requested otherwise).
 - [ ] Proposed action list (create / improve / add to Rule or AGENTS) was shown to the user and **user confirmed** before any file create/edit.
