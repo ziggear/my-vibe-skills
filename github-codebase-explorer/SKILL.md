@@ -1,21 +1,47 @@
 ---
 name: github-codebase-explorer
-description: Thoroughly analyze and understand a GitHub codebase. Use when exploring a new repository, understanding project structure, or generating comprehensive project documentation. Accepts a GitHub repo URL, checks Git/SSH access, clones the repo via command line, then discovers key modules and creates IntroductionOfProject.md with project overview, architecture, and caller's guide.
+description: Thoroughly analyze and understand a codebase. Use when exploring a new repository, understanding project structure, or generating comprehensive project documentation. Accepts either a GitHub repo URL (clone after access checks) or an explicit local path to an existing checkout; when the path already contains a project (e.g. `.git`), skip GitHub and analyze in place. Writes IntroductionOfProject.md (or a custom filename) at the analyzed Git repo root (sibling of `.git`) so multiple repos under one tree do not overwrite each other's output.
 context: fork
-agent: Explore
-allowed-tools: Read, Glob, Grep, Bash
-argument-hint: [github-repo-url] [output-filename]
+agent: general-purpose
+allowed-tools: Read, Glob, Grep, Bash, Write
+argument-hint: [github-repo-url | local-repo-path] [output-filename]
 ---
 
 # GitHub Codebase Explorer
 
-You are an expert codebase analyst. Your task is to systematically understand a GitHub repository and generate comprehensive documentation.
+You are an expert codebase analyst. Your task is to systematically understand a repository and generate comprehensive documentation.
 
-## Prerequisites: Repo Access and Clone
+## Prerequisites: Choose Source (Local Path vs GitHub)
 
-Before analysis, ensure GitHub access and obtain the codebase.
+Before analysis, decide whether the codebase is **already on disk** or must be **fetched from GitHub**.
 
-### Step 0a: Check GitHub Access (Do This First)
+### Step 0 — Local codebase fast path (skip GitHub)
+
+**When the user explicitly gives a filesystem path** (absolute, `~/...`, or workspace-relative) **and that path is a directory that already contains the project** — treat as **local-only** and **do not** run Step 0a (SSH/GitHub checks) or clone from GitHub.
+
+**Strong signal the path is a real checkout (use this rule):**
+
+- A **`.git`** entry exists under that directory. Count both:
+  - **`.git` as a directory** (normal repository), and
+  - **`.git` as a file** (linked worktree / some submodule layouts).
+
+If that holds:
+
+1. **Resolve** the path (expand `~`, follow the user’s path literally; use `Bash` to `test -d` / `ls` if needed).
+2. **Set the analyzed repo root** to that directory for **all** of Steps 1–8 (`Read` / `Glob` / `Grep` use this root). For Step 8, treat this as **the only** directory where the output file may live unless the user explicitly asked for a different absolute path.
+3. **Skip** Step 0a and Step 0b entirely — go straight to **Step 1 (read README, etc.)**.
+
+**Analyzed repo root** (use consistently): the directory that **contains** `.git` as an immediate child (same level as `README.md`, `src/`, etc.). The default output `IntroductionOfProject.md` belongs **next to** `.git` — i.e. `<analyzed-repo-root>/IntroductionOfProject.md`, **not** a parent folder (e.g. not the outer monorepo/workspace root when you are analyzing an inner repo). That way **several Git repos under one tree** each keep their own file and **do not overwrite** one another.
+
+**If the user gave a path but there is no `.git`:** do not assume it is wrong; they may use a non-Git export or a subtree. Either ask once for clarification **or**, if the tree clearly looks like source (e.g. `package.json`, `go.mod`, `Cargo.toml`, `src/`), proceed with analysis in that directory and still **skip** GitHub unless they also gave a **GitHub URL** to clone.
+
+**If the input is clearly a GitHub URL** (`github.com/...`, `git@github.com:...`): ignore the fast path and use Step 0a → 0b below.
+
+---
+
+### Step 0a: Check GitHub Access (only when cloning from GitHub)
+
+Run **only** when you need to clone from GitHub (URL provided and local fast path does **not** apply):
 
 Run these checks so the user can fix permissions before clone fails:
 
@@ -38,7 +64,7 @@ Run these checks so the user can fix permissions before clone fails:
 
 If SSH test fails, instruct the user to either configure an SSH key for GitHub or provide an **HTTPS clone URL** (e.g. `https://github.com/owner/repo.git`), which may use cached credentials or prompt for username/token.
 
-### Step 0b: Get Repo URL and Clone
+### Step 0b: Get Repo URL and Clone (only when cloning from GitHub)
 
 - **If the user provides a GitHub repo URL** (e.g. `https://github.com/owner/repo` or `git@github.com:owner/repo.git`):
   - Normalize URL to a cloneable form (ensure it ends with `.git` for HTTPS or is in `git@github.com:owner/repo.git` form for SSH).
@@ -48,16 +74,16 @@ If SSH test fails, instruct the user to either configure an SSH key for GitHub o
     git clone --depth 1 <repo-url> <target-dir>
     ```
   - Use `--depth 1` for a shallow clone unless the user needs full history.
-  - After cloning, **run all analysis steps (Steps 1–8) under the cloned directory** (e.g. `cd <target-dir>` in subsequent Bash commands; use that path for Read/Glob/Grep).
+  - After cloning, **run all analysis steps (Steps 1–8) under the cloned directory** (e.g. `cd <target-dir>` in subsequent Bash commands; use that path for Read/Glob/Grep). That cloned folder is the **analyzed repo root** (contains `.git`); **write** `IntroductionOfProject.md` (or the chosen filename) **there**, not outside `<target-dir>`.
 
-- **If the repo is already in the workspace** (user did not give a URL):
-  - Skip clone. Proceed with the 8-step analysis in the current (or specified) repo directory.
+- **If the repo is already in the workspace** (user gave a local path per Step 0 fast path, or did not give a URL but the workspace root is the repo):
+  - Skip clone. Proceed with the 8-step analysis in that repo directory.
 
-- **If the user did not provide a URL and no repo is present**: Ask for a GitHub repository URL, then run Step 0a and 0b.
+- **If the user did not provide a URL or a usable path and no repo is present**: Ask for a **GitHub repository URL** or an **explicit local path** to the repo root, then run the appropriate branch (0a/0b for URL, or Step 0 fast path for local).
 
 ## Analysis Methodology
 
-Follow this **8-step process** to thoroughly understand any codebase (run from the repo root, i.e. cloned dir or existing workspace):
+Follow this **8-step process** to thoroughly understand any codebase. **Always** run from the **analyzed repo root**: the single Git root for this run (directory that contains `.git`), whether that came from clone, explicit local path, or `git rev-parse --show-toplevel` when appropriate — **not** an arbitrary parent directory when a nested repo is the subject.
 
 ### Step 1: Read Root Documentation (Priority Order)
 
@@ -247,7 +273,27 @@ Create a comprehensive markdown file with the following structure:
 [Links to external docs, examples, tutorials]
 ```
 
-**Write the output to:** If user passed two arguments, the second is the output filename; if one argument and it is not a GitHub URL, use it as the output filename; otherwise use `IntroductionOfProject.md`. Place the file in the analyzed repo root (cloned dir or workspace).
+**Determine output filename:**
+- If the user passed **two** arguments: first = GitHub URL or local repo path, second = output filename
+- If **one** argument: if it is a **GitHub URL** or an **existing directory** used as repo root (including Step 0 fast path) → use `IntroductionOfProject.md`
+- If **one** argument: if it is **not** a URL and **not** an existing directory (e.g. only a filename like `MyOverview.md`) → use that string as the output filename; **analyzed repo root** = the Git root for the scope of work (`git rev-parse --show-toplevel` from the relevant cwd when inside a repo), not “workspace root” if that would point **above** the repo being documented
+- Otherwise: use `IntroductionOfProject.md`
+
+**Where to write the file (required — prevents overwrites):**
+
+- **Default:** `<analyzed-repo-root>/IntroductionOfProject.md` — the **same directory as `.git`** (sibling of the `.git` entry), for **this** repository only.
+- **Never** place the file in a **parent** directory of the analyzed repo just because the IDE opened a larger folder or monorepo. **One Git repo ⇒ one output file beside that repo’s `.git`.** Nested or sibling repos under one tree each get their own copy when you analyze each root separately; writing everything to a shared parent would **overwrite** a single `IntroductionOfProject.md`.
+- If the user’s path is ambiguous (e.g. they pointed at a folder that is **not** a Git root but contains **multiple** nested `.git` dirs), **stop and ask** which repo root to analyze **or** run the skill **once per** chosen repo root.
+
+**MANDATORY FINAL CHECKLIST — complete every item before finishing:**
+
+- [ ] Determine the output filename using the rules above
+- [ ] Confirm **analyzed repo root** = the directory that **contains** `.git` for the repo you analyzed in Steps 1–7 (clone target dir, explicit local path, or `git rev-parse --show-toplevel` as appropriate)
+- [ ] Use the `Write` tool to write the full markdown content to `<analyzed-repo-root>/<output-filename>` (must be **sibling** of `.git`, not a parent path unless the user explicitly required a different absolute output path)
+- [ ] Confirm the file was written by reading it back with the `Read` tool
+- [ ] Report the full file path to the user
+
+> **CRITICAL:** You MUST use the `Write` tool to save the file. Do NOT output the content as chat text only. If the file is not written to disk, Step 8 is incomplete.
 
 ## Best Practices
 
@@ -261,7 +307,8 @@ Create a comprehensive markdown file with the following structure:
 
 ## Important Reminders
 
-- **First**: Run Step 0a (check GitHub/SSH access). If the user will clone via SSH and the test fails, tell them to add their public key to GitHub or use an HTTPS URL.
+- **First**: If the user gave an explicit local path with `.git` (dir or file) under it, use the **Step 0 fast path** — **do not** run Step 0a or clone.
+- **GitHub clone path**: Only then run Step 0a (SSH/GitHub access). If the user will clone via SSH and the test fails, tell them to add their public key to GitHub or use an HTTPS URL.
 - **Repo source**: If the user provides a GitHub repo URL, run Step 0b to clone it; then run Steps 1–8 inside the cloned directory.
 - Always start with README.md unless it doesn't exist
 - Ignore docs/ until Step 6 (unless user requests it)
@@ -269,8 +316,8 @@ Create a comprehensive markdown file with the following structure:
 - Caller's Guide is the most valuable section - spend time here
 - If a project is too large, focus on understanding the architecture rather than every file
 - Use diagrams (ASCII art) when helpful to show relationships
-- When writing the output file, use the path relative to the analyzed repo root (or workspace); if user passed an output filename in arguments, use that.
+- When writing the output file, put it **in the analyzed repo root** (next to `.git`); do not substitute the workspace root when it would steal or unify paths across multiple repos. If the user passed an output filename in arguments, still use **that** name under **that** repo root unless they gave a fully explicit output path.
 
 ---
 
-**Now begin: (0a) check GitHub access → (0b) get repo URL and clone if needed → then run the 8-step analysis.**
+**Now begin:** If explicit local repo path with `.git` → set repo root and run Steps 1–8. Otherwise → (0a) check GitHub access → (0b) clone if needed → then run the 8-step analysis.
